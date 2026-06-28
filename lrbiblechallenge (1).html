@@ -1,0 +1,1385 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LR Bible Challenge</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600;700&family=Montserrat:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          primary: '#6A1B9A',
+          dark: '#4A148C',
+          light: '#F3E5F5',
+          gold: '#C9A84C',
+          bg: '#FDFAF7',
+          ink: '#1A0A2E',
+          muted: '#7B6B8D',
+          red: '#C62828',
+          success: '#2E7D32',
+        },
+        fontFamily: {
+          body: ['Montserrat', 'sans-serif'],
+          display: ['Cormorant Garamond', 'serif'],
+        },
+        boxShadow: {
+          soft: '0 8px 30px rgba(106,27,154,0.10)',
+          softer: '0 4px 16px rgba(106,27,154,0.07)',
+        }
+      }
+    }
+  }
+</script>
+<style>
+  body { font-family: 'Montserrat', sans-serif; background: #FDFAF7; color: #1A0A2E; }
+  .font-display { font-family: 'Cormorant Garamond', serif; }
+  .card { background: #fff; border-radius: 20px; box-shadow: 0 8px 30px rgba(106,27,154,0.10); }
+  .scrollbar-thin::-webkit-scrollbar { width: 6px; }
+  .scrollbar-thin::-webkit-scrollbar-thumb { background: #C9A84C; border-radius: 10px; }
+  .pin-dot { width: 16px; height: 16px; border-radius: 50%; border: 2px solid #6A1B9A; }
+  .pin-dot.filled { background: #6A1B9A; }
+  .progress-track { background: #F3E5F5; border-radius: 999px; height: 10px; overflow: hidden; }
+  .progress-fill { background: linear-gradient(90deg,#6A1B9A,#C9A84C); height: 100%; transition: width .4s ease; }
+  .toast { animation: slideUp .3s ease, fadeOut .3s ease 2.4s forwards; }
+  @keyframes slideUp { from{opacity:0; transform:translateY(20px);} to{opacity:1; transform:translateY(0);} }
+  @keyframes fadeOut { to{opacity:0; transform:translateY(-10px);} }
+  .nav-item.active { color:#6A1B9A; }
+  .nav-item.active .nav-ic { transform: translateY(-2px); }
+  .fade-in { animation: fadeIn .35s ease; }
+  @keyframes fadeIn { from{opacity:0; transform:translateY(8px);} to{opacity:1; transform:translateY(0);} }
+  .confetti-bg {
+    background-image: radial-gradient(circle, #C9A84C 2px, transparent 2px);
+    background-size: 18px 18px;
+    opacity: 0.18;
+  }
+  .day-cell { width: 100%; aspect-ratio: 1/1; border-radius: 4px; }
+  ::selection { background: #C9A84C; color: #1A0A2E; }
+</style>
+</head>
+<body class="min-h-screen">
+
+<div id="toast-root" class="fixed bottom-24 left-0 right-0 z-50 flex flex-col items-center gap-2 pointer-events-none"></div>
+
+<div id="app" class="max-w-md mx-auto min-h-screen relative pb-24"></div>
+
+<script>
+/* ============================================================
+   MOCK "SUPABASE" DATA LAYER (localStorage-backed)
+   Mirrors the schema described in the spec. Swap with real
+   Supabase client calls (supabase-js) for production use.
+   ============================================================ */
+const DB_KEY = 'lrbc_db';
+const SESSION_KEY = 'lrbc_session';
+const ADMIN_KEY = 'lrbc_admin_session';
+
+function todayISO(){ return new Date().toISOString().slice(0,10); }
+function uid(){ return 'id-' + Math.random().toString(36).slice(2,10); }
+function ghTime(ts){
+  const d = new Date(ts);
+  return d.toLocaleString('en-GH', { timeZone:'Africa/Accra', day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' });
+}
+function timeAgo(ts){
+  const diff = (Date.now() - new Date(ts).getTime())/1000;
+  if (diff < 60) return 'just now';
+  if (diff < 3600) return Math.floor(diff/60)+'m ago';
+  if (diff < 86400) return Math.floor(diff/3600)+'h ago';
+  return Math.floor(diff/86400)+'d ago';
+}
+function monthKey(d=new Date()){ return d.toISOString().slice(0,7); }
+function daysInMonth(d=new Date()){ return new Date(d.getFullYear(), d.getMonth()+1, 0).getDate(); }
+
+const AFFIRMATION_TEMPLATES = [
+"{name} is blessed and highly favoured. Today God is opening new doors for you.",
+"{name}, you are a daughter of the King — walk today in that confidence.",
+"God's mercy is new for {name} this morning. Receive it fully.",
+"{name}, your faithfulness is seen by Heaven. Keep pressing on.",
+"Today, {name}, let go of worry — your Father already has it covered.",
+"{name}, you are stronger than yesterday because His grace carried you here.",
+"The joy of the Lord is {name}'s strength today.",
+"{name}, be still — God is fighting battles you don't even see.",
+"Your prayers matter, {name}. Heaven is listening.",
+"{name}, today is a gift wrapped in grace. Unwrap it with gratitude.",
+"God has good plans for {name} — plans of peace, not of harm.",
+"{name}, you carry light wherever you go today.",
+"Rest in this, {name}: you are deeply and unconditionally loved.",
+"{name}, the same God who began this in you will finish it.",
+"Today {name} walks by faith, not by sight — and that pleases God.",
+"{name}, your obedience this season is planting seeds you'll harvest later.",
+"God sees the quiet faithfulness of {name}. It is never wasted.",
+"{name}, may today be filled with unexpected kindness and grace.",
+"You are not alone today, {name} — Emmanuel goes before you.",
+"{name}, let today's reading be a lamp for your feet.",
+"Your worship, {name}, is a fragrant offering before the Lord today.",
+"{name}, healing is happening in you even when you can't see it yet.",
+"Today, {name}, choose gratitude — it will guard your heart.",
+"{name}, the Lord is your shepherd; you shall not want today.",
+"Be encouraged, {name} — your breakthrough season has begun.",
+"{name}, God's word is alive in you today, doing a deep work.",
+"You are seen, {name}, and you are deeply cherished by God.",
+"{name}, let His peace, which surpasses understanding, guard your heart today.",
+"Today {name} is reminded: greater is He that is in you.",
+"{name}, your story is still being written by a faithful God."
+];
+
+function defaultDB(){
+  const today = todayISO();
+  const month = monthKey();
+  return {
+    members: [
+      { id:'m-admin0', membership_code:'LR001', name:'Joanita Mensah', email:'joanita@example.com', phone:'', location:'Accra', attendance_score:90, years_attended:'3', pin:null, first_login:true, created_at: new Date().toISOString() },
+      { id:'m-2', membership_code:'LR002', name:'Abena Owusu', email:'', phone:'', location:'Tema', attendance_score:80, years_attended:'2', pin:'1234', first_login:false, created_at: new Date().toISOString() },
+      { id:'m-3', membership_code:'LR003', name:'Grace Addo', email:'', phone:'', location:'Kumasi', attendance_score:95, years_attended:'5', pin:'1234', first_login:false, created_at: new Date().toISOString() },
+    ],
+    monthly_readings: [
+      { id:'r-today', month, book:'Psalms', day: today, chapter:'23', verses:'1-6',
+        full_text: "1 The Lord is my shepherd; I shall not want.\n2 He maketh me to lie down in green pastures: he leadeth me beside the still waters.\n3 He restoreth my soul: he leadeth me in the paths of righteousness for his name's sake.\n4 Yea, though I walk through the valley of the shadow of death, I will fear no evil: for thou art with me; thy rod and thy staff they comfort me.\n5 Thou preparest a table before me in the presence of mine enemies: thou anointest my head with oil; my cup runneth over.\n6 Surely goodness and mercy shall follow me all the days of my life: and I will dwell in the house of the Lord for ever.",
+        audio_url: null, created_by: 'm-admin0', created_at: new Date().toISOString() }
+    ],
+    reading_completions: [],
+    comments: [],
+    reactions: [],
+    replies: [],
+    streaks: [
+      { id:'s-1', member_id:'m-admin0', current_streak:4, longest_streak:9, last_active_date: null, total_days_completed: 12 },
+      { id:'s-2', member_id:'m-2', current_streak:2, longest_streak:6, last_active_date: null, total_days_completed: 8 },
+      { id:'s-3', member_id:'m-3', current_streak:9, longest_streak:21, last_active_date: null, total_days_completed: 30 },
+    ],
+    monthly_scores: [],
+    monthly_winners: [],
+    badges: [],
+    prayer_journal: [],
+    prayer_wall: [],
+    prayer_wall_joins: [],
+    shoutouts: [],
+    broadcasts: [],
+    affirmations: AFFIRMATION_TEMPLATES.map((t,i)=>{
+      const d = new Date(); d.setDate(d.getDate()-15+i);
+      return { id:'aff-'+i, template:t, date: d.toISOString().slice(0,10) };
+    })
+  };
+}
+
+function loadDB(){
+  let raw = localStorage.getItem(DB_KEY);
+  if (!raw){ const db = defaultDB(); localStorage.setItem(DB_KEY, JSON.stringify(db)); return db; }
+  return JSON.parse(raw);
+}
+function saveDB(db){ localStorage.setItem(DB_KEY, JSON.stringify(db)); }
+
+let db = loadDB();
+
+function findMember(query){
+  query = query.trim().toLowerCase();
+  return db.members.find(m => m.name.toLowerCase() === query || m.membership_code.toLowerCase() === query)
+      || db.members.find(m => m.name.toLowerCase().includes(query) || m.membership_code.toLowerCase().includes(query));
+}
+function getSession(){ try { return JSON.parse(localStorage.getItem(SESSION_KEY)); } catch(e){ return null; } }
+function setSession(s){ localStorage.setItem(SESSION_KEY, JSON.stringify(s)); }
+function clearSession(){ localStorage.removeItem(SESSION_KEY); }
+function getAdminSession(){ return localStorage.getItem(ADMIN_KEY) === '1'; }
+
+function ensureStreak(memberId){
+  let s = db.streaks.find(s=>s.member_id===memberId);
+  if (!s){ s = { id: uid(), member_id: memberId, current_streak:0, longest_streak:0, last_active_date:null, total_days_completed:0 }; db.streaks.push(s); }
+  return s;
+}
+function ensureMonthlyScore(memberId, month){
+  let sc = db.monthly_scores.find(s=>s.member_id===memberId && s.month===month);
+  if (!sc){ sc = { id: uid(), member_id:memberId, month, comment_points:0, reaction_received_points:0, reaction_given_points:0, weekly_completion_bonus:0, streak_bonus:0, full_month_bonus:0, total:0 }; db.monthly_scores.push(sc); }
+  return sc;
+}
+function recalcTotal(sc){
+  sc.total = sc.comment_points + sc.reaction_received_points + sc.reaction_given_points + sc.weekly_completion_bonus + sc.streak_bonus + sc.full_month_bonus;
+}
+function awardBadge(memberId, badge_type){
+  if (db.badges.find(b=>b.member_id===memberId && b.badge_type===badge_type)) return false;
+  db.badges.push({ id: uid(), member_id: memberId, badge_type, earned_at: new Date().toISOString() });
+  return true;
+}
+
+function toast(msg, type='success'){
+  const root = document.getElementById('toast-root');
+  const el = document.createElement('div');
+  const color = type==='success' ? 'bg-success' : 'bg-red';
+  el.className = `toast ${color} text-white px-5 py-3 rounded-xl shadow-lg text-sm font-medium max-w-xs text-center`;
+  el.textContent = msg;
+  root.appendChild(el);
+  setTimeout(()=>el.remove(), 2700);
+}
+
+/* ============================================================
+   ROUTER
+   ============================================================ */
+const routes = {};
+function route(path, fn){ routes[path] = fn; }
+function navigate(path){ location.hash = path; }
+function currentPath(){ return (location.hash || '#/login').slice(1) || '/login'; }
+
+window.addEventListener('hashchange', render);
+window.addEventListener('DOMContentLoaded', render);
+
+function render(){
+  saveDB(db);
+  const path = currentPath();
+  const app = document.getElementById('app');
+  app.innerHTML = '';
+
+  const protectedPaths = ['/dashboard','/reading','/prayer','/journey','/leaderboard'];
+  const session = getSession();
+  if (protectedPaths.some(p=>path.startsWith(p)) && !session){ navigate('/login'); return; }
+  if (path.startsWith('/admin') && path !== '/admin/login' && !getAdminSession()){ navigate('/admin/login'); return; }
+
+  let matched = routes[path];
+  if (!matched){
+    const base = '/' + path.split('/')[1];
+    matched = routes[base];
+  }
+  if (!matched){ matched = routes['/login']; }
+  const content = matched(session);
+  app.appendChild(content);
+  if (protectedPaths.some(p=>path.startsWith(p))){
+    app.appendChild(bottomNav(path, session));
+  }
+}
+
+function el(html){
+  const t = document.createElement('template');
+  t.innerHTML = html.trim();
+  return t.content.firstChild;
+}
+
+/* ============================================================
+   SHARED UI
+   ============================================================ */
+function bottomNav(path, session){
+  const streak = ensureStreak(session.id).current_streak;
+  const items = [
+    { p:'/dashboard', icon:'🏠', label:'Home' },
+    { p:'/reading', icon:'📖', label:'Reading' },
+    { p:'/prayer', icon:'🙏', label:'Prayer' },
+    { p:'/journey', icon:'📈', label:'Journey' },
+    { p:'/leaderboard', icon:'🏆', label:'Leaderboard' },
+  ];
+  const nav = el(`<nav class="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-white border-t border-light shadow-[0_-4px_20px_rgba(106,27,154,0.08)] flex justify-between px-2 py-2 z-40"></nav>`);
+  items.forEach(it=>{
+    const active = path.startsWith(it.p);
+    const btn = el(`
+      <button class="nav-item flex-1 flex flex-col items-center gap-0.5 py-1.5 rounded-xl transition ${active?'active':'text-muted'}">
+        <span class="nav-ic text-xl relative transition-transform">
+          ${it.icon}
+          ${it.p==='/dashboard' && streak>0 ? `<span class="absolute -top-1 -right-2 bg-gold text-[10px] text-white rounded-full px-1 leading-tight">${streak}</span>` : ''}
+        </span>
+        <span class="text-[10px] font-medium">${it.label}</span>
+      </button>`);
+    btn.onclick = ()=> navigate(it.p);
+    nav.appendChild(btn);
+  });
+  return nav;
+}
+
+function header(title, opts={}){
+  return el(`
+    <div class="px-6 pt-8 pb-4 ${opts.bg||''}">
+      <h1 class="font-display text-3xl font-semibold text-dark">${title}</h1>
+      ${opts.sub? `<p class="text-muted text-sm mt-1">${opts.sub}</p>`:''}
+    </div>`);
+}
+
+/* ============================================================
+   LOGIN / PIN FLOW
+   ============================================================ */
+route('/login', () => {
+  const wrap = el(`
+    <div class="min-h-screen flex flex-col items-center justify-center px-8 fade-in">
+      <div class="w-16 h-16 rounded-full bg-primary flex items-center justify-center text-2xl text-white shadow-soft mb-6">✝️</div>
+      <h1 class="font-display text-4xl font-semibold text-dark text-center">Welcome to the<br/>LR Bible Challenge</h1>
+      <p class="text-muted text-center mt-3 mb-8 text-sm">Enter your name or LR code to begin</p>
+      <div class="w-full card p-5">
+        <input id="login-input" type="text" placeholder="Name or LR code" class="w-full border border-light rounded-xl px-4 py-3 outline-none focus:border-primary text-ink" />
+        <button id="login-btn" class="mt-4 w-full bg-primary hover:bg-dark text-white rounded-xl py-3 font-semibold transition">Continue</button>
+        <p id="login-err" class="text-red text-xs mt-3 hidden"></p>
+      </div>
+      <button id="admin-link" class="text-muted text-xs mt-8 underline">Admin Portal</button>
+    </div>`);
+
+  wrap.querySelector('#login-btn').onclick = () => {
+    const val = wrap.querySelector('#login-input').value;
+    const err = wrap.querySelector('#login-err');
+    if (!val.trim()){ err.textContent = 'Please enter your name or LR code'; err.classList.remove('hidden'); return; }
+    const member = findMember(val);
+    if (!member){ err.textContent = "We couldn't find that member. Check spelling or ask an admin."; err.classList.remove('hidden'); return; }
+    sessionStorage.setItem('lrbc_pending_member', member.id);
+    navigate(member.pin ? '/pin-entry' : '/pin-setup');
+  };
+  wrap.querySelector('#admin-link').onclick = () => navigate('/admin/login');
+  return wrap;
+});
+
+function pinScreen({title, sub, onSubmit, confirm=false}){
+  const wrap = el(`
+    <div class="min-h-screen flex flex-col items-center justify-center px-8 fade-in">
+      <h2 class="font-display text-3xl font-semibold text-dark text-center">${title}</h2>
+      <p class="text-muted text-center mt-2 mb-8 text-sm">${sub}</p>
+      <div class="flex gap-3 mb-2" id="dots"></div>
+      <p id="pin-err" class="text-red text-xs mt-2 hidden"></p>
+      <div class="grid grid-cols-3 gap-4 mt-8 w-full max-w-xs">
+        ${[1,2,3,4,5,6,7,8,9,'','0','⌫'].map(n=>`<button data-key="${n}" class="key h-16 rounded-2xl bg-white shadow-softer text-xl font-semibold text-dark ${n===''?'invisible':''}">${n}</button>`).join('')}
+      </div>
+    </div>`);
+  let pin = '';
+  const dotsEl = wrap.querySelector('#dots');
+  function renderDots(){
+    dotsEl.innerHTML = '';
+    for (let i=0;i<4;i++){
+      dotsEl.appendChild(el(`<div class="pin-dot ${i<pin.length?'filled':''}"></div>`));
+    }
+  }
+  renderDots();
+  wrap.querySelectorAll('.key').forEach(k=>{
+    k.onclick = () => {
+      const key = k.dataset.key;
+      if (key === '⌫'){ pin = pin.slice(0,-1); }
+      else if (key !== '' && pin.length < 4){ pin += key; }
+      renderDots();
+      if (pin.length === 4){
+        setTimeout(()=> onSubmit(pin, wrap.querySelector('#pin-err'), ()=>{ pin=''; renderDots(); }), 150);
+      }
+    };
+  });
+  return wrap;
+}
+
+route('/pin-setup', () => {
+  let firstPin = null;
+  const memberId = sessionStorage.getItem('lrbc_pending_member');
+  const member = db.members.find(m=>m.id===memberId);
+  if (!member) { navigate('/login'); return el('<div></div>'); }
+
+  function step1(){
+    return pinScreen({
+      title: `Hi ${member.name.split(' ')[0]}, set a PIN`,
+      sub: 'Choose a 4-digit PIN to protect your account',
+      onSubmit: (pin, errEl, reset) => {
+        firstPin = pin;
+        const container = document.getElementById('app');
+        container.replaceChildren(step2());
+      }
+    });
+  }
+  function step2(){
+    const w = pinScreen({
+      title: 'Confirm your PIN',
+      sub: 'Enter the same 4 digits again',
+      onSubmit: (pin, errEl, reset) => {
+        if (pin !== firstPin){
+          errEl.textContent = "PINs don't match — try again.";
+          errEl.classList.remove('hidden');
+          reset();
+          return;
+        }
+        member.pin = pin;
+        const isFirst = member.first_login;
+        saveDB(db);
+        setSession({ id: member.id, name: member.name, membership_code: member.membership_code });
+        if (isFirst) awardBadge(member.id, 'Welcome');
+        toast('PIN set successfully 💜');
+        navigate('/dashboard');
+      }
+    });
+    const main = document.createElement('div');
+    main.appendChild(w);
+    return main.firstChild;
+  }
+  return step1();
+});
+
+route('/pin-entry', () => {
+  const memberId = sessionStorage.getItem('lrbc_pending_member');
+  const member = db.members.find(m=>m.id===memberId);
+  if (!member) { navigate('/login'); return el('<div></div>'); }
+  return pinScreen({
+    title: `Welcome back, ${member.name.split(' ')[0]}`,
+    sub: 'Enter your 4-digit PIN',
+    onSubmit: (pin, errEl, reset) => {
+      if (pin !== member.pin){
+        errEl.textContent = 'Incorrect PIN — try again.';
+        errEl.classList.remove('hidden');
+        reset();
+        return;
+      }
+      setSession({ id: member.id, name: member.name, membership_code: member.membership_code });
+      toast(`Welcome back, ${member.name.split(' ')[0]}! 💜`);
+      navigate('/dashboard');
+    }
+  });
+});
+
+function notYouLink(){
+  const a = el(`<button class="text-muted text-xs underline">Not you?</button>`);
+  a.onclick = () => { clearSession(); navigate('/login'); };
+  return a;
+}
+
+/* ============================================================
+   DASHBOARD
+   ============================================================ */
+route('/dashboard', (session) => {
+  const member = db.members.find(m=>m.id===session.id);
+  const streak = ensureStreak(member.id);
+  const month = monthKey();
+  const dim = daysInMonth();
+  const completedThisMonth = db.reading_completions.filter(c=>c.member_id===member.id && c.month===month).length;
+
+  const wrap = el(`<div class="fade-in pb-4"></div>`);
+  const headerEl = header('Dashboard');
+  const topRow = el(`<div class="flex justify-end px-6 -mt-2 mb-2"></div>`);
+  topRow.appendChild(notYouLink());
+
+  wrap.appendChild(headerEl);
+  wrap.appendChild(topRow);
+
+  const body = el(`<div class="px-6 space-y-5"></div>`);
+
+  // First login welcome
+  if (member.first_login){
+    const banner = el(`
+      <div class="card border-2 border-gold p-4 flex justify-between items-start gap-3">
+        <p class="text-sm font-medium text-dark">Welcome to the LR Bible Challenge family, ${member.name.split(' ')[0]}! 🎉</p>
+        <button class="text-muted text-lg leading-none" id="dismiss-welcome">×</button>
+      </div>`);
+    banner.querySelector('#dismiss-welcome').onclick = () => { member.first_login = false; saveDB(db); render(); };
+    body.appendChild(banner);
+  }
+
+  // Broadcasts
+  const activeBroadcasts = db.broadcasts.filter(b => new Date(b.expires_at) > new Date());
+  activeBroadcasts.forEach(b=>{
+    const banner = el(`
+      <div class="card bg-light border border-primary/20 p-4 flex justify-between items-start gap-3">
+        <p class="text-sm text-dark">📣 ${b.message}</p>
+        <button class="text-muted text-lg leading-none dismiss-bc">×</button>
+      </div>`);
+    banner.querySelector('.dismiss-bc').onclick = () => { banner.remove(); };
+    body.appendChild(banner);
+  });
+
+  // Affirmation
+  const aff = db.affirmations.find(a=>a.date === todayISO());
+  const affText = (aff ? aff.template : AFFIRMATION_TEMPLATES[0]).replace('{name}', member.name.split(' ')[0]);
+  body.appendChild(el(`
+    <div class="card border-2 border-gold p-5 text-center">
+      <p class="text-xs uppercase tracking-wide text-gold font-semibold mb-2">Today's Word for You</p>
+      <p class="font-display text-2xl text-dark leading-snug">${affText}</p>
+    </div>`));
+
+  // Streak + progress
+  body.appendChild(el(`
+    <div class="card p-5">
+      <div class="flex justify-between items-center mb-3">
+        <div>
+          <p class="text-2xl font-bold text-primary">🔥 ${streak.current_streak} day streak</p>
+          <p class="text-muted text-xs mt-1">Longest streak: ${streak.longest_streak} days</p>
+        </div>
+      </div>
+      <div class="flex justify-between text-xs text-muted mb-1">
+        <span>This month</span><span>${completedThisMonth}/${dim} days</span>
+      </div>
+      <div class="progress-track"><div class="progress-fill" style="width:${Math.min(100, completedThisMonth/dim*100)}%"></div></div>
+    </div>`));
+
+  // Nudge
+  const yesterday = new Date(); yesterday.setDate(yesterday.getDate()-1);
+  const yISO = yesterday.toISOString().slice(0,10);
+  if (streak.last_active_date && streak.last_active_date < yISO){
+    body.appendChild(el(`
+      <div class="card border-2 border-gold bg-light p-4">
+        <p class="text-sm font-medium text-dark">You missed yesterday — your streak is at risk today! Open today's reading 💜</p>
+      </div>`));
+  } else if (streak.last_active_date === yISO){
+    body.appendChild(el(`
+      <div class="card bg-light p-4">
+        <p class="text-sm font-medium text-dark">You're on track! Don't forget today's reading 💜</p>
+      </div>`));
+  }
+
+  // Monthly winner banner
+  const lastWinner = [...db.monthly_winners].filter(w=>w.announced).sort((a,b)=>b.month.localeCompare(a.month))[0];
+  if (lastWinner){
+    const winnerMember = db.members.find(m=>m.id===lastWinner.member_id);
+    const expires = lastWinner.announcement_expires ? new Date(lastWinner.announcement_expires) : null;
+    if (winnerMember && (!expires || expires >= new Date())){
+      body.appendChild(el(`
+        <div class="card relative overflow-hidden p-5 text-center bg-gradient-to-br from-primary to-dark text-white">
+          <div class="confetti-bg absolute inset-0"></div>
+          <p class="relative text-xs uppercase tracking-wide text-gold font-semibold mb-1">🎉 Monthly Champion</p>
+          <p class="relative font-display text-2xl">${winnerMember.name}</p>
+          <p class="relative text-sm text-white/80 mt-1">${lastWinner.month} · ${lastWinner.total_score} points</p>
+        </div>`));
+    }
+  }
+
+  // Quick nav
+  const grid = el(`<div class="grid grid-cols-2 gap-4"></div>`);
+  [
+    {p:'/reading', icon:'📖', label:"Today's Reading"},
+    {p:'/prayer', icon:'🙏', label:'Prayer Wall'},
+    {p:'/journey', icon:'📈', label:'My Journey'},
+    {p:'/leaderboard', icon:'🏆', label:'Leaderboard'},
+  ].forEach(c=>{
+    const card = el(`
+      <button class="card p-5 flex flex-col items-start gap-2 hover:shadow-soft transition text-left">
+        <span class="text-2xl">${c.icon}</span>
+        <span class="font-semibold text-sm text-dark">${c.label}</span>
+      </button>`);
+    card.onclick = () => navigate(c.p);
+    grid.appendChild(card);
+  });
+  body.appendChild(grid);
+
+  wrap.appendChild(body);
+  return wrap;
+});
+
+/* ============================================================
+   DAILY READING WALL
+   ============================================================ */
+route('/reading', (session) => {
+  const member = db.members.find(m=>m.id===session.id);
+  const today = todayISO();
+  const reading = db.monthly_readings.find(r=>r.day===today);
+  const wrap = el(`<div class="fade-in"></div>`);
+  wrap.appendChild(header(`${reading? reading.book+' '+reading.chapter : "Today's Reading"}`, { sub: reading? `Verses ${reading.verses}` : '' }));
+
+  const body = el(`<div class="px-6 space-y-5"></div>`);
+
+  if (!reading){
+    body.appendChild(el(`<div class="card p-6 text-center text-muted">No reading has been posted for today yet — check back soon 💜</div>`));
+    wrap.appendChild(body);
+    return wrap;
+  }
+
+  const completed = db.reading_completions.find(c=>c.member_id===member.id && c.reading_id===reading.id);
+
+  // scripture text card with tappable verses
+  const verseLines = reading.full_text.split('\n').filter(Boolean);
+  const scriptureCard = el(`<div class="card p-5"><div id="verses" class="space-y-2 leading-relaxed text-ink"></div></div>`);
+  const versesEl = scriptureCard.querySelector('#verses');
+  let selectedQuote = null;
+  verseLines.forEach(line => {
+    const match = line.match(/^(\d+)\s+(.*)/);
+    const num = match ? match[1] : '';
+    const text = match ? match[2] : line;
+    const span = el(`<p class="cursor-pointer rounded-lg px-2 py-1 transition hover:bg-light" data-num="${num}"><span class="text-gold font-semibold mr-1">${num}</span>${text}</p>`);
+    span.onclick = () => {
+      versesEl.querySelectorAll('p').forEach(p=>p.classList.remove('bg-gold/30'));
+      span.classList.add('bg-gold/30');
+      selectedQuote = `> "${text}" — ${reading.book} ${reading.chapter}:${num}`;
+      const ta = wrap.querySelector('#comment-text');
+      if (ta && !ta.disabled){ ta.value = selectedQuote + '\n\n' + ta.value.replace(/^>.*\n\n?/,''); }
+    };
+    versesEl.appendChild(span);
+  });
+  body.appendChild(scriptureCard);
+
+  if (reading.audio_url){
+    body.appendChild(el(`<div class="card p-3"><iframe class="w-full rounded-xl" height="200" src="${reading.audio_url}" allowfullscreen></iframe></div>`));
+  }
+
+  // Read confirmation button
+  if (!completed){
+    const btn = el(`<button class="w-full bg-primary hover:bg-dark text-white rounded-xl py-4 font-semibold text-lg shadow-soft transition">✅ I've read this</button>`);
+    btn.onclick = () => { markReadingComplete(member, reading); render(); };
+    body.appendChild(btn);
+  } else {
+    body.appendChild(el(`<div class="w-full bg-success/10 text-success rounded-xl py-4 font-semibold text-lg text-center">✅ You've completed today's reading</div>`));
+  }
+
+  // Reflection prompt
+  body.appendChild(el(`<p class="font-display text-xl text-dark">What stood out to you from today's reading?</p>`));
+
+  // Comment box
+  const locked = !completed;
+  const anonId = uid();
+  const commentBox = el(`
+    <div class="card p-4 space-y-3 ${locked?'opacity-60':''}">
+      <textarea id="comment-text" ${locked?'disabled':''} placeholder="${locked? "Tap 'I've read this' to unlock reflections" : 'Share your reflection...'}" class="w-full border border-light rounded-xl px-3 py-2 outline-none focus:border-primary text-sm h-24"></textarea>
+      <div class="flex items-center justify-between">
+        <label class="flex items-center gap-2 text-xs text-muted"><input type="checkbox" id="anon-toggle-${anonId}" ${locked?'disabled':''}/> Post anonymously 🔒</label>
+        <button id="post-comment-${anonId}" ${locked?'disabled':''} class="bg-primary disabled:opacity-50 text-white text-sm font-semibold px-4 py-2 rounded-xl">Post</button>
+      </div>
+    </div>`);
+  if (!locked){
+    commentBox.querySelector(`#post-comment-${anonId}`).onclick = () => {
+      const ta = commentBox.querySelector('#comment-text');
+      const content = ta.value.trim();
+      if (!content){ toast('Write something before posting', 'error'); return; }
+      const isAnon = commentBox.querySelector(`#anon-toggle-${anonId}`).checked;
+      const quoted = content.startsWith('>') ? content.split('\n')[0].replace(/^>\s*/,'') : null;
+      db.comments.push({
+        id: uid(), member_id: member.id, reading_id: reading.id,
+        content, quoted_verse: quoted, is_anonymous: isAnon, is_pinned:false, created_at: new Date().toISOString()
+      });
+      const sc = ensureMonthlyScore(member.id, monthKey());
+      // first word badge
+      const memberCommentsCount = db.comments.filter(c=>c.member_id===member.id).length;
+      if (memberCommentsCount === 1) awardBadge(member.id, 'First Word');
+      saveDB(db);
+      toast('Reflection posted 💜');
+      render();
+    };
+  }
+  body.appendChild(commentBox);
+
+  // Comments list
+  body.appendChild(el(`<p class="font-display text-xl text-dark pt-2">Community Reflections</p>`));
+  const readingComments = db.comments.filter(c=>c.reading_id===reading.id);
+  const pinned = readingComments.filter(c=>c.is_pinned);
+  const rest = readingComments.filter(c=>!c.is_pinned).sort((a,b)=> new Date(b.created_at)-new Date(a.created_at));
+  const ordered = [...pinned, ...rest];
+
+  if (ordered.length === 0){
+    body.appendChild(el(`<div class="card p-6 text-center text-muted text-sm">No reflections yet today — be the first to share 💜</div>`));
+  } else {
+    const list = el(`<div class="space-y-4"></div>`);
+    ordered.forEach(c => list.appendChild(commentCard(c, member)));
+    body.appendChild(list);
+  }
+
+  wrap.appendChild(body);
+  return wrap;
+});
+
+function markReadingComplete(member, reading){
+  const today = todayISO();
+  const streak = ensureStreak(member.id);
+  const yesterday = new Date(); yesterday.setDate(yesterday.getDate()-1);
+  const yISO = yesterday.toISOString().slice(0,10);
+
+  if (streak.last_active_date === today) return; // already done
+
+  if (streak.last_active_date === yISO){ streak.current_streak += 1; }
+  else { streak.current_streak = 1; }
+  streak.last_active_date = today;
+  streak.total_days_completed += 1;
+  if (streak.current_streak > streak.longest_streak) streak.longest_streak = streak.current_streak;
+
+  if (streak.current_streak >= 7) awardBadge(member.id, 'On Fire');
+  if (streak.current_streak >= 21) awardBadge(member.id, 'Unbreakable');
+
+  db.reading_completions.push({ id: uid(), member_id: member.id, reading_id: reading.id, completed_at: new Date().toISOString(), month: monthKey() });
+
+  const sc = ensureMonthlyScore(member.id, monthKey());
+  sc.comment_points += 5;
+
+  // weekly completion bonus: naive check — last 7 calendar days all completed
+  const last7 = [...Array(7)].map((_,i)=>{ const d=new Date(); d.setDate(d.getDate()-i); return d.toISOString().slice(0,10); });
+  const completedDates = new Set(db.reading_completions.filter(c=>c.member_id===member.id).map(c=>c.completed_at.slice(0,10)));
+  if (last7.every(d=>completedDates.has(d))) sc.weekly_completion_bonus += 10;
+
+  if (streak.current_streak % 7 === 0) sc.streak_bonus += 10;
+
+  const dim = daysInMonth();
+  const completedThisMonth = db.reading_completions.filter(c=>c.member_id===member.id && c.month===monthKey()).length;
+  if (completedThisMonth === dim){
+    sc.full_month_bonus += 30;
+    awardBadge(member.id, 'Faithful Finisher');
+  }
+
+  recalcTotal(sc);
+  saveDB(db);
+  toast('Reading complete! Streak updated 🔥');
+}
+
+function commentCard(c, currentMember){
+  const author = c.is_anonymous ? 'Anonymous Sister' : (db.members.find(m=>m.id===c.member_id)?.name || 'Member');
+  const reactionTypes = ['🙏','❤️','🔥','💡'];
+  const card = el(`
+    <div class="card p-4 space-y-2">
+      ${c.is_pinned? `<p class="text-xs text-gold font-semibold">📌 Pinned Reflection</p>`:''}
+      <div class="flex justify-between items-baseline">
+        <p class="font-semibold text-sm text-dark">${author}</p>
+        <p class="text-xs text-muted">${timeAgo(c.created_at)}</p>
+      </div>
+      ${c.quoted_verse? `<p class="text-xs italic text-primary bg-light rounded-lg px-3 py-2">${c.quoted_verse}</p>`:''}
+      <p class="text-sm text-ink">${c.content.replace(/^>.*\n\n?/,'')}</p>
+      <div class="flex gap-2 pt-1" id="reactions-${c.id}"></div>
+      <div id="replies-${c.id}"></div>
+    </div>`);
+
+  const reactionRow = card.querySelector(`#reactions-${c.id}`);
+  reactionTypes.forEach(type=>{
+    const count = db.reactions.filter(r=>r.comment_id===c.id && r.type===type).length;
+    const mine = db.reactions.find(r=>r.comment_id===c.id && r.type===type && r.member_id===currentMember.id);
+    const btn = el(`<button class="text-xs px-2 py-1 rounded-full ${mine?'bg-light text-primary':'bg-bg text-muted'} border border-light">${type} ${count>0?count:''}</button>`);
+    btn.onclick = () => {
+      if (mine){
+        db.reactions = db.reactions.filter(r=>r.id!==mine.id);
+      } else {
+        db.reactions.push({ id: uid(), comment_id: c.id, member_id: currentMember.id, type, created_at: new Date().toISOString() });
+        if (c.member_id && c.member_id !== currentMember.id){
+          const sc = ensureMonthlyScore(c.member_id, monthKey());
+          sc.reaction_received_points += 1; recalcTotal(sc);
+          const totalReceived = db.reactions.filter(r=>{
+            const com = db.comments.find(cm=>cm.id===r.comment_id);
+            return com && com.member_id === c.member_id;
+          }).length;
+          if (totalReceived >= 10) awardBadge(c.member_id, 'Encouraged Others');
+        }
+        const mySc = ensureMonthlyScore(currentMember.id, monthKey());
+        mySc.reaction_given_points += 1; recalcTotal(mySc);
+      }
+      saveDB(db);
+      render();
+    };
+    reactionRow.appendChild(btn);
+  });
+
+  // replies
+  const repliesWrap = card.querySelector(`#replies-${c.id}`);
+  const replies = db.replies.filter(r=>r.comment_id===c.id);
+  const toggle = el(`<button class="text-xs text-primary font-medium mt-1">${replies.length} repl${replies.length===1?'y':'ies'} ${replies.length?'▾':''}</button>`);
+  const list = el(`<div class="hidden mt-2 space-y-2 pl-3 border-l-2 border-light"></div>`);
+  replies.forEach(r=>{
+    const rAuthor = r.is_anonymous ? 'Anonymous Sister' : (db.members.find(m=>m.id===r.member_id)?.name || 'Member');
+    list.appendChild(el(`<div class="text-xs"><span class="font-semibold text-dark">${rAuthor}:</span> <span class="text-ink">${r.content}</span> <span class="text-muted">· ${timeAgo(r.created_at)}</span></div>`));
+  });
+  const replyForm = el(`
+    <div class="flex gap-2 mt-2">
+      <input class="flex-1 border border-light rounded-lg px-2 py-1 text-xs outline-none focus:border-primary" placeholder="Write a reply..." />
+      <button class="bg-primary text-white text-xs px-3 py-1 rounded-lg">Send</button>
+    </div>`);
+  const input = replyForm.querySelector('input');
+  replyForm.querySelector('button').onclick = () => {
+    const val = input.value.trim();
+    if (!val) return;
+    db.replies.push({ id: uid(), comment_id: c.id, member_id: currentMember.id, content: val, is_anonymous: false, created_at: new Date().toISOString() });
+    saveDB(db); render();
+  };
+  list.appendChild(replyForm);
+  toggle.onclick = () => list.classList.toggle('hidden');
+  repliesWrap.appendChild(toggle);
+  repliesWrap.appendChild(list);
+
+  return card;
+}
+
+/* ============================================================
+   PRAYER PAGE
+   ============================================================ */
+route('/prayer', (session) => {
+  const member = db.members.find(m=>m.id===session.id);
+  const wrap = el(`<div class="fade-in"></div>`);
+  wrap.appendChild(header('Prayer'));
+  const tabs = el(`
+    <div class="px-6 flex gap-2 mb-4">
+      <button id="tab-journal" class="flex-1 py-2 rounded-xl text-sm font-semibold bg-primary text-white">Prayer Journal</button>
+      <button id="tab-wall" class="flex-1 py-2 rounded-xl text-sm font-semibold bg-light text-primary">Prayer Wall</button>
+    </div>`);
+  const body = el(`<div class="px-6"></div>`);
+  wrap.appendChild(tabs); wrap.appendChild(body);
+
+  function showJournal(){
+    tabs.querySelector('#tab-journal').className = "flex-1 py-2 rounded-xl text-sm font-semibold bg-primary text-white";
+    tabs.querySelector('#tab-wall').className = "flex-1 py-2 rounded-xl text-sm font-semibold bg-light text-primary";
+    body.innerHTML = '';
+    const today = todayISO();
+    const reading = db.monthly_readings.find(r=>r.day===today);
+    const form = el(`
+      <div class="card p-4 space-y-3 mb-5">
+        <textarea id="journal-text" placeholder="Write a private prayer..." class="w-full border border-light rounded-xl px-3 py-2 text-sm h-24 outline-none focus:border-primary"></textarea>
+        ${reading? `<label class="flex items-center gap-2 text-xs text-muted"><input type="checkbox" id="link-reading"/> Link to today's reading (${reading.book} ${reading.chapter})</label>`:''}
+        <button id="save-journal" class="bg-primary text-white text-sm font-semibold px-4 py-2 rounded-xl w-full">Save Prayer</button>
+      </div>`);
+    form.querySelector('#save-journal').onclick = () => {
+      const val = form.querySelector('#journal-text').value.trim();
+      if (!val){ toast('Write a prayer first', 'error'); return; }
+      const linked = reading && form.querySelector('#link-reading')?.checked;
+      db.prayer_journal.push({ id: uid(), member_id: member.id, reading_id: linked? reading.id : null, content: val, created_at: new Date().toISOString() });
+      saveDB(db); toast('Prayer saved 💜'); showJournal();
+    };
+    body.appendChild(form);
+
+    const entries = db.prayer_journal.filter(p=>p.member_id===member.id).sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
+    if (!entries.length){
+      body.appendChild(el(`<div class="card p-6 text-center text-muted text-sm">No prayers yet — your journal is just for you 💜</div>`));
+    } else {
+      entries.forEach(p=>{
+        const linkedReading = p.reading_id ? db.monthly_readings.find(r=>r.id===p.reading_id) : null;
+        body.appendChild(el(`
+          <div class="card p-4 mb-3">
+            <p class="text-xs text-muted mb-1">${ghTime(p.created_at)} ${linkedReading? `· linked to ${linkedReading.book} ${linkedReading.chapter}`:''}</p>
+            <p class="text-sm text-ink">${p.content}</p>
+          </div>`));
+      });
+    }
+  }
+
+  function showWall(){
+    tabs.querySelector('#tab-wall').className = "flex-1 py-2 rounded-xl text-sm font-semibold bg-primary text-white";
+    tabs.querySelector('#tab-journal').className = "flex-1 py-2 rounded-xl text-sm font-semibold bg-light text-primary";
+    body.innerHTML = '';
+    const id1 = uid();
+    const form = el(`
+      <div class="card p-4 space-y-3 mb-5">
+        <textarea id="wall-text-${id1}" placeholder="Share a prayer topic with the community..." class="w-full border border-light rounded-xl px-3 py-2 text-sm h-20 outline-none focus:border-primary"></textarea>
+        <label class="flex items-center gap-2 text-xs text-muted"><input type="checkbox" id="wall-anon-${id1}"/> Post anonymously 🔒</label>
+        <button id="wall-post-${id1}" class="bg-primary text-white text-sm font-semibold px-4 py-2 rounded-xl w-full">Post to Prayer Wall</button>
+      </div>`);
+    form.querySelector(`#wall-post-${id1}`).onclick = () => {
+      const val = form.querySelector(`#wall-text-${id1}`).value.trim();
+      if (!val){ toast('Write a topic first', 'error'); return; }
+      const isAnon = form.querySelector(`#wall-anon-${id1}`).checked;
+      db.prayer_wall.push({ id: uid(), member_id: member.id, topic: val, is_anonymous: isAnon, created_at: new Date().toISOString() });
+      const count = db.prayer_wall.filter(p=>p.member_id===member.id).length;
+      if (count >= 10) awardBadge(member.id, 'Prayer Warrior');
+      saveDB(db); toast('Posted to the Prayer Wall 🙏'); showWall();
+    };
+    body.appendChild(form);
+
+    const topics = [...db.prayer_wall].sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
+    if (!topics.length){
+      body.appendChild(el(`<div class="card p-6 text-center text-muted text-sm">No prayer requests yet — be the first to share 💜</div>`));
+    } else {
+      topics.forEach(p=>{
+        const author = p.is_anonymous ? 'Anonymous Sister' : (db.members.find(m=>m.id===p.member_id)?.name || 'Member');
+        const joins = db.prayer_wall_joins.filter(j=>j.prayer_id===p.id);
+        const myJoin = joins.find(j=>j.member_id===member.id);
+        const card = el(`
+          <div class="card p-4 mb-3 space-y-2">
+            <div class="flex justify-between items-baseline">
+              <p class="font-semibold text-sm text-dark">${author}</p>
+              <p class="text-xs text-muted">${timeAgo(p.created_at)}</p>
+            </div>
+            <p class="text-sm text-ink">${p.topic}</p>
+            <div class="flex justify-between items-center">
+              <button class="pray-btn text-xs px-3 py-1.5 rounded-full ${myJoin?'bg-primary text-white':'bg-light text-primary'} font-medium">🙏 I prayed for this</button>
+              <button class="names-toggle text-xs text-muted underline">${joins.length} sister${joins.length===1?'':'s'} have prayed for this</button>
+            </div>
+            <div class="names-list hidden text-xs text-muted"></div>
+          </div>`);
+        card.querySelector('.pray-btn').onclick = () => {
+          if (myJoin) return;
+          db.prayer_wall_joins.push({ id: uid(), prayer_id: p.id, member_id: member.id, prayed_at: new Date().toISOString() });
+          saveDB(db); toast('Thank you for praying 🙏'); showWall();
+        };
+        const namesList = card.querySelector('.names-list');
+        const names = joins.map(j=>db.members.find(m=>m.id===j.member_id)?.name).filter(Boolean);
+        namesList.textContent = names.length ? names.join(', ') : 'No names to show';
+        card.querySelector('.names-toggle').onclick = () => namesList.classList.toggle('hidden');
+        body.appendChild(card);
+      });
+    }
+  }
+
+  tabs.querySelector('#tab-journal').onclick = showJournal;
+  tabs.querySelector('#tab-wall').onclick = showWall;
+  showJournal();
+  return wrap;
+});
+
+/* ============================================================
+   MY JOURNEY
+   ============================================================ */
+route('/journey', (session) => {
+  const member = db.members.find(m=>m.id===session.id);
+  const streak = ensureStreak(member.id);
+  const wrap = el(`<div class="fade-in"></div>`);
+  wrap.appendChild(header('My Journey'));
+  const body = el(`<div class="px-6 space-y-6"></div>`);
+
+  // Calendar state
+  let viewDate = new Date();
+  const calCard = el(`<div class="card p-4"></div>`);
+  function renderCal(){
+    calCard.innerHTML = '';
+    const monthLabel = viewDate.toLocaleString('default',{month:'long', year:'numeric'});
+    const head = el(`
+      <div class="flex justify-between items-center mb-3">
+        <button id="prev-m" class="text-primary px-2">←</button>
+        <p class="font-semibold text-sm text-dark">${monthLabel}</p>
+        <button id="next-m" class="text-primary px-2">→</button>
+      </div>`);
+    calCard.appendChild(head);
+    const grid = el(`<div class="grid grid-cols-7 gap-1"></div>`);
+    const dim = new Date(viewDate.getFullYear(), viewDate.getMonth()+1, 0).getDate();
+    const completions = db.reading_completions.filter(c=>c.member_id===member.id);
+    const comments = db.comments.filter(c=>c.member_id===member.id);
+    for (let d=1; d<=dim; d++){
+      const dateStr = new Date(viewDate.getFullYear(), viewDate.getMonth(), d).toISOString().slice(0,10);
+      const did = completions.some(c=>c.completed_at.slice(0,10)===dateStr);
+      const commented = comments.some(c=>c.created_at.slice(0,10)===dateStr && db.monthly_readings.find(r=>r.id===c.reading_id)?.day===dateStr);
+      let cls = 'bg-light';
+      if (did && commented) cls = 'bg-primary';
+      else if (did) cls = 'bg-primary/40';
+      grid.appendChild(el(`<div class="day-cell ${cls}" title="${dateStr}"></div>`));
+    }
+    calCard.appendChild(grid);
+    calCard.appendChild(el(`<div class="flex gap-3 text-[10px] text-muted mt-3"><span class="flex items-center gap-1"><span class="w-3 h-3 rounded bg-light inline-block"></span>No activity</span><span class="flex items-center gap-1"><span class="w-3 h-3 rounded bg-primary/40 inline-block"></span>Read</span><span class="flex items-center gap-1"><span class="w-3 h-3 rounded bg-primary inline-block"></span>Read + commented</span></div>`));
+    calCard.querySelector('#prev-m').onclick = () => { viewDate.setMonth(viewDate.getMonth()-1); renderCal(); };
+    calCard.querySelector('#next-m').onclick = () => { viewDate.setMonth(viewDate.getMonth()+1); renderCal(); };
+  }
+  renderCal();
+  body.appendChild(calCard);
+
+  // Personal bests
+  const myComments = db.comments.filter(c=>c.member_id===member.id);
+  const myReactionsReceived = db.reactions.filter(r=>{
+    const c = db.comments.find(cm=>cm.id===r.comment_id);
+    return c && c.member_id === member.id;
+  }).length;
+  const completionsByMonth = {};
+  db.reading_completions.filter(c=>c.member_id===member.id).forEach(c=>{ completionsByMonth[c.month] = (completionsByMonth[c.month]||0)+1; });
+  const mostActiveMonth = Object.entries(completionsByMonth).sort((a,b)=>b[1]-a[1])[0];
+
+  body.appendChild(el(`
+    <div>
+      <p class="font-display text-xl text-dark mb-2">Personal Bests</p>
+      <div class="grid grid-cols-2 gap-3">
+        <div class="card p-4"><p class="text-2xl font-bold text-primary">${streak.longest_streak}</p><p class="text-xs text-muted">Longest streak</p></div>
+        <div class="card p-4"><p class="text-2xl font-bold text-primary">${mostActiveMonth? mostActiveMonth[1] : 0}</p><p class="text-xs text-muted">Most active month ${mostActiveMonth? `(${mostActiveMonth[0]})`:''}</p></div>
+        <div class="card p-4"><p class="text-2xl font-bold text-primary">${streak.total_days_completed}</p><p class="text-xs text-muted">Total days completed</p></div>
+        <div class="card p-4"><p class="text-2xl font-bold text-primary">${myComments.length}</p><p class="text-xs text-muted">Total comments</p></div>
+        <div class="card p-4 col-span-2"><p class="text-2xl font-bold text-primary">${myReactionsReceived}</p><p class="text-xs text-muted">Total reactions received</p></div>
+      </div>
+    </div>`));
+
+  // Badges
+  const badgeDefs = [
+    {key:'First Word', icon:'🌱', cond:'Post your first comment'},
+    {key:'Encouraged Others', icon:'🙌', cond:'Receive 10+ reactions'},
+    {key:'Faithful Finisher', icon:'🏁', cond:'Complete a full month'},
+    {key:'Word Warrior', icon:'⚔️', cond:'Complete 3 months straight'},
+    {key:'On Fire', icon:'🔥', cond:'7-day streak'},
+    {key:'Unbreakable', icon:'💎', cond:'21-day streak'},
+    {key:'Monthly Champion', icon:'👑', cond:'Win a monthly challenge'},
+    {key:"Sister's Keeper", icon:'🤝', cond:'Give 3+ shoutouts'},
+    {key:'Prayer Warrior', icon:'🙏', cond:'Post 10+ prayer wall topics'},
+    {key:'Welcome', icon:'🎉', cond:'Awarded on first login'},
+  ];
+  const myBadges = db.badges.filter(b=>b.member_id===member.id);
+  const badgeGrid = el(`<div class="grid grid-cols-3 gap-3"></div>`);
+  badgeDefs.forEach(bd=>{
+    const earned = myBadges.find(b=>b.badge_type===bd.key);
+    badgeGrid.appendChild(el(`
+      <div class="card p-3 text-center ${earned?'':'opacity-50'}">
+        <p class="text-3xl mb-1">${earned? bd.icon : '🔒'}</p>
+        <p class="text-[11px] font-semibold text-dark">${bd.key}</p>
+        <p class="text-[10px] text-muted mt-1">${earned? new Date(earned.earned_at).toLocaleDateString() : bd.cond}</p>
+      </div>`));
+  });
+  body.appendChild(el(`<div><p class="font-display text-xl text-dark mb-2">Badges Collection</p></div>`));
+  body.appendChild(badgeGrid);
+
+  // Comments history
+  body.appendChild(el(`<p class="font-display text-xl text-dark pt-2">My Reflections</p>`));
+  const searchWrap = el(`<input placeholder="Search your reflections..." class="w-full border border-light rounded-xl px-3 py-2 text-sm outline-none focus:border-primary mb-3"/>`);
+  body.appendChild(searchWrap);
+  const histList = el(`<div class="space-y-3"></div>`);
+  function renderHist(filter=''){
+    histList.innerHTML = '';
+    const filtered = myComments.filter(c=>c.content.toLowerCase().includes(filter.toLowerCase()));
+    if (!filtered.length){ histList.appendChild(el(`<div class="card p-5 text-center text-muted text-sm">No reflections found</div>`)); return; }
+    filtered.sort((a,b)=>new Date(b.created_at)-new Date(a.created_at)).forEach(c=>{
+      const reading = db.monthly_readings.find(r=>r.id===c.reading_id);
+      const reactCount = db.reactions.filter(r=>r.comment_id===c.id).length;
+      histList.appendChild(el(`
+        <div class="card p-4">
+          <p class="text-xs text-muted mb-1">${reading? `${reading.book} ${reading.chapter}`:''} · ${ghTime(c.created_at)}</p>
+          ${c.quoted_verse? `<p class="text-xs italic text-primary mb-1">${c.quoted_verse}</p>`:''}
+          <p class="text-sm text-ink">${c.content.replace(/^>.*\n\n?/,'')}</p>
+          <p class="text-xs text-muted mt-1">${reactCount} reaction${reactCount===1?'':'s'}</p>
+        </div>`));
+    });
+  }
+  renderHist();
+  searchWrap.oninput = (e)=>renderHist(e.target.value);
+  body.appendChild(histList);
+
+  // Monthly scores history
+  body.appendChild(el(`<p class="font-display text-xl text-dark pt-2">Monthly Scores</p>`));
+  const myScores = db.monthly_scores.filter(s=>s.member_id===member.id).sort((a,b)=>b.month.localeCompare(a.month));
+  if (!myScores.length){
+    body.appendChild(el(`<div class="card p-5 text-center text-muted text-sm">No scores yet — start reading to earn points!</div>`));
+  } else {
+    const table = el(`<div class="card p-4 overflow-x-auto"><table class="w-full text-xs"><thead><tr class="text-muted text-left"><th class="py-1">Month</th><th>Comments</th><th>React+</th><th>React-given</th><th>Weekly</th><th>Streak</th><th>Full</th><th>Total</th></tr></thead><tbody></tbody></table></div>`);
+    const tbody = table.querySelector('tbody');
+    myScores.forEach(s=>{
+      tbody.appendChild(el(`<tr class="border-t border-light"><td class="py-2 font-medium">${s.month}</td><td>${s.comment_points}</td><td>${s.reaction_received_points}</td><td>${s.reaction_given_points}</td><td>${s.weekly_completion_bonus}</td><td>${s.streak_bonus}</td><td>${s.full_month_bonus}</td><td class="font-bold text-primary">${s.total}</td></tr>`));
+    });
+    body.appendChild(table);
+  }
+
+  wrap.appendChild(body);
+  return wrap;
+});
+
+/* ============================================================
+   LEADERBOARD
+   ============================================================ */
+route('/leaderboard', (session) => {
+  const member = db.members.find(m=>m.id===session.id);
+  const wrap = el(`<div class="fade-in"></div>`);
+  wrap.appendChild(header('Leaderboard'));
+  const tabs = el(`
+    <div class="px-6 flex gap-2 mb-4">
+      <button id="tab-month" class="flex-1 py-2 rounded-xl text-sm font-semibold bg-primary text-white">This Month</button>
+      <button id="tab-hof" class="flex-1 py-2 rounded-xl text-sm font-semibold bg-light text-primary">Hall of Fame</button>
+    </div>`);
+  const body = el(`<div class="px-6"></div>`);
+  wrap.appendChild(tabs); wrap.appendChild(body);
+
+  function showMonth(){
+    tabs.querySelector('#tab-month').className = "flex-1 py-2 rounded-xl text-sm font-semibold bg-primary text-white";
+    tabs.querySelector('#tab-hof').className = "flex-1 py-2 rounded-xl text-sm font-semibold bg-light text-primary";
+    body.innerHTML = '';
+    const month = monthKey();
+    const dim = daysInMonth();
+    db.members.forEach(m=>ensureMonthlyScore(m.id, month));
+    const ranked = db.monthly_scores.filter(s=>s.month===month).sort((a,b)=>b.total-a.total);
+    if (!ranked.length){
+      body.appendChild(el(`<div class="card p-6 text-center text-muted text-sm">No scores yet this month — be the first to read! 💜</div>`));
+      return;
+    }
+    const list = el(`<div class="space-y-2"></div>`);
+    ranked.forEach((s, i)=>{
+      const m = db.members.find(mm=>mm.id===s.member_id);
+      if (!m) return;
+      const streak = ensureStreak(m.id);
+      const completed = db.reading_completions.filter(c=>c.member_id===m.id && c.month===month).length;
+      const isMe = m.id === member.id;
+      const medal = i===0?'🥇':i===1?'🥈':i===2?'🥉':null;
+      list.appendChild(el(`
+        <div class="card p-3 flex items-center gap-3 ${isMe?'border-2 border-primary':''} ${i<3?'bg-gradient-to-r from-light to-white':''}">
+          <div class="w-8 text-center font-bold text-primary">${medal || (i+1)}</div>
+          <div class="flex-1">
+            <p class="text-sm font-semibold text-dark">${m.name} ${isMe?'(You)':''}</p>
+            <p class="text-xs text-muted">${completed}/${dim} days · 🔥 ${streak.current_streak}</p>
+          </div>
+          <div class="font-bold text-primary">${s.total}</div>
+        </div>`));
+    });
+    body.appendChild(list);
+  }
+
+  function showHOF(){
+    tabs.querySelector('#tab-hof').className = "flex-1 py-2 rounded-xl text-sm font-semibold bg-primary text-white";
+    tabs.querySelector('#tab-month').className = "flex-1 py-2 rounded-xl text-sm font-semibold bg-light text-primary";
+    body.innerHTML = '';
+    const winners = [...db.monthly_winners].sort((a,b)=>b.month.localeCompare(a.month));
+    if (!winners.length){
+      body.appendChild(el(`<div class="card p-6 text-center text-muted text-sm">No champions crowned yet — the first Hall of Fame entry could be you 👑</div>`));
+      return;
+    }
+    const list = el(`<div class="space-y-2 max-h-[60vh] overflow-y-auto scrollbar-thin"></div>`);
+    winners.forEach(w=>{
+      const m = db.members.find(mm=>mm.id===w.member_id);
+      list.appendChild(el(`
+        <div class="card p-4 flex items-center gap-3">
+          <span class="text-2xl">👑</span>
+          <div class="flex-1">
+            <p class="text-sm font-semibold text-dark">${m? m.name : 'Member'}</p>
+            <p class="text-xs text-muted">${w.month} · ${w.total_score} points</p>
+          </div>
+        </div>`));
+    });
+    body.appendChild(list);
+  }
+
+  tabs.querySelector('#tab-month').onclick = showMonth;
+  tabs.querySelector('#tab-hof').onclick = showHOF;
+  showMonth();
+  return wrap;
+});
+
+/* ============================================================
+   ADMIN PORTAL (lite)
+   ============================================================ */
+const ADMIN_PASSWORD = 'changeme123'; // mirrors env var ADMIN_PASSWORD in production
+
+route('/admin/login', () => {
+  const wrap = el(`
+    <div class="min-h-screen flex flex-col items-center justify-center px-8 fade-in">
+      <h2 class="font-display text-3xl font-semibold text-dark">Admin Portal</h2>
+      <p class="text-muted text-sm mt-2 mb-6">Authorized staff only</p>
+      <div class="w-full card p-5">
+        <input id="admin-pw" type="password" placeholder="Admin password" class="w-full border border-light rounded-xl px-4 py-3 outline-none focus:border-primary"/>
+        <button id="admin-submit" class="mt-4 w-full bg-primary text-white rounded-xl py-3 font-semibold">Enter</button>
+        <p id="admin-err" class="text-red text-xs mt-3 hidden"></p>
+      </div>
+      <button id="back-to-login" class="text-muted text-xs mt-8 underline">Back to member login</button>
+    </div>`);
+  wrap.querySelector('#admin-submit').onclick = () => {
+    const pw = wrap.querySelector('#admin-pw').value;
+    if (pw === ADMIN_PASSWORD){
+      localStorage.setItem(ADMIN_KEY, '1');
+      navigate('/admin');
+    } else {
+      const err = wrap.querySelector('#admin-err');
+      err.textContent = 'Incorrect password'; err.classList.remove('hidden');
+    }
+  };
+  wrap.querySelector('#back-to-login').onclick = () => navigate('/login');
+  return wrap;
+});
+
+route('/admin', () => {
+  const wrap = el(`<div class="fade-in pb-10"></div>`);
+  wrap.appendChild(header('Admin Dashboard'));
+  const logout = el(`<div class="px-6 -mt-2 mb-3"><button class="text-muted text-xs underline" id="admin-logout">Log out</button></div>`);
+  logout.querySelector('#admin-logout').onclick = () => { localStorage.removeItem(ADMIN_KEY); navigate('/admin/login'); };
+  wrap.appendChild(logout);
+
+  const body = el(`<div class="px-6 space-y-5"></div>`);
+  const today = todayISO();
+  const activeToday = db.reading_completions.filter(c=>c.completed_at.slice(0,10)===today).length;
+  const commentsToday = db.comments.filter(c=>c.created_at.slice(0,10)===today).length;
+
+  body.appendChild(el(`
+    <div class="grid grid-cols-2 gap-3">
+      <div class="card p-4"><p class="text-2xl font-bold text-primary">${db.members.length}</p><p class="text-xs text-muted">Total members</p></div>
+      <div class="card p-4"><p class="text-2xl font-bold text-primary">${activeToday}</p><p class="text-xs text-muted">Active today</p></div>
+      <div class="card p-4"><p class="text-2xl font-bold text-primary">${commentsToday}</p><p class="text-xs text-muted">Comments today</p></div>
+      <div class="card p-4"><p class="text-2xl font-bold text-primary">${db.monthly_readings.length}</p><p class="text-xs text-muted">Readings posted</p></div>
+    </div>`));
+
+  const navGrid = el(`<div class="grid grid-cols-2 gap-3"></div>`);
+  [
+    {p:'/admin/readings', label:'📖 Reading Management'},
+    {p:'/admin/members', label:'👥 Member Management'},
+    {p:'/admin/comments', label:'💬 Comment Moderation'},
+    {p:'/admin/winner', label:'👑 Monthly Winner'},
+    {p:'/admin/broadcast', label:'📣 Broadcast Message'},
+    {p:'/admin/affirmations', label:'✨ Affirmations'},
+    {p:'/admin/import', label:'📥 Import Members'},
+  ].forEach(c=>{
+    const btn = el(`<button class="card p-4 text-left text-sm font-semibold text-dark hover:shadow-soft transition">${c.label}</button>`);
+    btn.onclick = () => navigate(c.p);
+    navGrid.appendChild(btn);
+  });
+  body.appendChild(navGrid);
+  wrap.appendChild(body);
+  return wrap;
+});
+
+route('/admin/readings', () => {
+  const wrap = el(`<div class="fade-in pb-10"></div>`);
+  wrap.appendChild(header('Reading Management'));
+  const body = el(`<div class="px-6 space-y-4"></div>`);
+  const form = el(`
+    <div class="card p-4 space-y-2">
+      <input id="r-date" type="date" class="w-full border border-light rounded-xl px-3 py-2 text-sm"/>
+      <input id="r-book" placeholder="Book" class="w-full border border-light rounded-xl px-3 py-2 text-sm"/>
+      <input id="r-chapter" placeholder="Chapter" class="w-full border border-light rounded-xl px-3 py-2 text-sm"/>
+      <input id="r-verses" placeholder="Verses (e.g. 1-10)" class="w-full border border-light rounded-xl px-3 py-2 text-sm"/>
+      <textarea id="r-text" placeholder="Full scripture text" class="w-full border border-light rounded-xl px-3 py-2 text-sm h-24"></textarea>
+      <input id="r-audio" placeholder="Audio/YouTube URL (optional)" class="w-full border border-light rounded-xl px-3 py-2 text-sm"/>
+      <button id="r-add" class="bg-primary text-white text-sm font-semibold px-4 py-2 rounded-xl w-full">Add Reading</button>
+    </div>`);
+  form.querySelector('#r-add').onclick = () => {
+    const date = form.querySelector('#r-date').value;
+    if (!date){ toast('Pick a date', 'error'); return; }
+    if (db.monthly_readings.find(r=>r.day===date)){ toast('A reading already exists for that date', 'error'); return; }
+    db.monthly_readings.push({
+      id: uid(), month: date.slice(0,7), book: form.querySelector('#r-book').value, day: date,
+      chapter: form.querySelector('#r-chapter').value, verses: form.querySelector('#r-verses').value,
+      full_text: form.querySelector('#r-text').value, audio_url: form.querySelector('#r-audio').value || null,
+      created_by: 'admin', created_at: new Date().toISOString()
+    });
+    saveDB(db); toast('Reading added'); render();
+  };
+  body.appendChild(form);
+
+  const table = el(`<div class="card p-4 overflow-x-auto"></div>`);
+  const t = el(`<table class="w-full text-xs"><thead><tr class="text-muted text-left"><th class="py-1">Date</th><th>Book</th><th>Ch</th><th></th></tr></thead><tbody></tbody></table>`);
+  const tbody = t.querySelector('tbody');
+  [...db.monthly_readings].sort((a,b)=>b.day.localeCompare(a.day)).forEach(r=>{
+    const row = el(`<tr class="border-t border-light"><td class="py-2">${r.day}</td><td>${r.book}</td><td>${r.chapter}</td><td><button class="text-red text-xs">Delete</button></td></tr>`);
+    row.querySelector('button').onclick = () => { db.monthly_readings = db.monthly_readings.filter(x=>x.id!==r.id); saveDB(db); toast('Deleted'); render(); };
+    tbody.appendChild(row);
+  });
+  table.appendChild(t);
+  body.appendChild(table);
+  wrap.appendChild(body);
+  return wrap;
+});
+
+route('/admin/members', () => {
+  const wrap = el(`<div class="fade-in pb-10"></div>`);
+  wrap.appendChild(header('Member Management'));
+  const body = el(`<div class="px-6 space-y-3"></div>`);
+  const search = el(`<input placeholder="Search by name or code..." class="w-full border border-light rounded-xl px-3 py-2 text-sm"/>`);
+  body.appendChild(search);
+  const list = el(`<div class="space-y-2"></div>`);
+  function renderList(filter=''){
+    list.innerHTML = '';
+    const month = monthKey();
+    db.members.filter(m=>m.name.toLowerCase().includes(filter.toLowerCase()) || m.membership_code.toLowerCase().includes(filter.toLowerCase())).forEach(m=>{
+      const sc = db.monthly_scores.find(s=>s.member_id===m.id && s.month===month);
+      const streak = ensureStreak(m.id);
+      const row = el(`
+        <div class="card p-3 flex items-center justify-between">
+          <div>
+            <p class="text-sm font-semibold text-dark">${m.name} <span class="text-muted text-xs">(${m.membership_code})</span></p>
+            <p class="text-xs text-muted">🔥${streak.current_streak} · score ${sc? sc.total : 0} · last active: ${streak.last_active_date || '—'}</p>
+          </div>
+          <button class="text-xs text-red underline">Reset PIN</button>
+        </div>`);
+      row.querySelector('button').onclick = () => { m.pin = null; saveDB(db); toast('PIN reset'); };
+      list.appendChild(row);
+    });
+  }
+  renderList();
+  search.oninput = e=>renderList(e.target.value);
+  body.appendChild(list);
+  wrap.appendChild(body);
+  return wrap;
+});
+
+route('/admin/comments', () => {
+  const wrap = el(`<div class="fade-in pb-10"></div>`);
+  wrap.appendChild(header('Comment Moderation'));
+  const body = el(`<div class="px-6 space-y-3"></div>`);
+  if (!db.comments.length){ body.appendChild(el(`<div class="card p-6 text-center text-muted text-sm">No comments yet</div>`)); }
+  [...db.comments].sort((a,b)=>new Date(b.created_at)-new Date(a.created_at)).forEach(c=>{
+    const reading = db.monthly_readings.find(r=>r.id===c.reading_id);
+    const author = c.is_anonymous ? 'Anonymous Sister' : (db.members.find(m=>m.id===c.member_id)?.name || 'Member');
+    const card = el(`
+      <div class="card p-4 space-y-2">
+        <p class="text-xs text-muted">${reading? `${reading.book} ${reading.chapter}`:''} · ${author} · ${ghTime(c.created_at)}</p>
+        <p class="text-sm text-ink">${c.content}</p>
+        <div class="flex gap-2">
+          <button class="text-xs px-3 py-1 rounded-full bg-light text-primary pin-btn">${c.is_pinned?'Unpin':'Pin'}</button>
+          <button class="text-xs px-3 py-1 rounded-full bg-red/10 text-red del-btn">Delete</button>
+        </div>
+      </div>`);
+    card.querySelector('.pin-btn').onclick = () => { c.is_pinned = !c.is_pinned; saveDB(db); render(); };
+    card.querySelector('.del-btn').onclick = () => { db.comments = db.comments.filter(x=>x.id!==c.id); saveDB(db); toast('Deleted'); render(); };
+    body.appendChild(card);
+  });
+  wrap.appendChild(body);
+  return wrap;
+});
+
+route('/admin/winner', () => {
+  const wrap = el(`<div class="fade-in pb-10"></div>`);
+  wrap.appendChild(header('Monthly Winner'));
+  const body = el(`<div class="px-6 space-y-3"></div>`);
+  const month = monthKey();
+  const top3 = [...db.monthly_scores].filter(s=>s.month===month).sort((a,b)=>b.total-a.total).slice(0,3);
+  if (!top3.length){ body.appendChild(el(`<div class="card p-6 text-center text-muted text-sm">No scores yet this month</div>`)); }
+  top3.forEach((s,i)=>{
+    const m = db.members.find(mm=>mm.id===s.member_id);
+    const card = el(`
+      <div class="card p-4 flex items-center justify-between">
+        <div>
+          <p class="text-sm font-semibold text-dark">${i+1}. ${m? m.name: ''}</p>
+          <p class="text-xs text-muted">Total: ${s.total} (comments ${s.comment_points}, react+ ${s.reaction_received_points}, react-given ${s.reaction_given_points}, weekly ${s.weekly_completion_bonus}, streak ${s.streak_bonus}, full month ${s.full_month_bonus})</p>
+        </div>
+        <button class="bg-primary text-white text-xs px-3 py-2 rounded-xl">Confirm Winner</button>
+      </div>`);
+    card.querySelector('button').onclick = () => {
+      const expires = new Date(); expires.setMonth(expires.getMonth()+1); expires.setDate(7);
+      db.monthly_winners = db.monthly_winners.filter(w=>w.month!==month);
+      db.monthly_winners.push({ id: uid(), member_id: m.id, month, total_score: s.total, announced:true, announcement_expires: expires.toISOString().slice(0,10) });
+      awardBadge(m.id, 'Monthly Champion');
+      saveDB(db); toast('Winner announced!'); render();
+    };
+    body.appendChild(card);
+  });
+  wrap.appendChild(body);
+  return wrap;
+});
+
+route('/admin/broadcast', () => {
+  const wrap = el(`<div class="fade-in pb-10"></div>`);
+  wrap.appendChild(header('Broadcast Message'));
+  const body = el(`<div class="px-6 space-y-3"></div>`);
+  const form = el(`
+    <div class="card p-4 space-y-2">
+      <textarea id="bc-msg" placeholder="Message to all members..." class="w-full border border-light rounded-xl px-3 py-2 text-sm h-20"></textarea>
+      <input id="bc-hours" type="number" value="24" class="w-full border border-light rounded-xl px-3 py-2 text-sm" placeholder="Expires in hours"/>
+      <button id="bc-send" class="bg-primary text-white text-sm font-semibold px-4 py-2 rounded-xl w-full">Send Broadcast</button>
+    </div>`);
+  form.querySelector('#bc-send').onclick = () => {
+    const msg = form.querySelector('#bc-msg').value.trim();
+    if (!msg){ toast('Write a message', 'error'); return; }
+    const hours = parseFloat(form.querySelector('#bc-hours').value) || 24;
+    const expires = new Date(); expires.setHours(expires.getHours()+hours);
+    db.broadcasts.push({ id: uid(), message: msg, expires_at: expires.toISOString(), created_at: new Date().toISOString() });
+    saveDB(db); toast('Broadcast sent'); render();
+  };
+  body.appendChild(form);
+  wrap.appendChild(body);
+  return wrap;
+});
+
+route('/admin/affirmations', () => {
+  const wrap = el(`<div class="fade-in pb-10"></div>`);
+  wrap.appendChild(header('Affirmation Management'));
+  const body = el(`<div class="px-6 space-y-3"></div>`);
+  const form = el(`
+    <div class="card p-4 space-y-2">
+      <input id="a-date" type="date" class="w-full border border-light rounded-xl px-3 py-2 text-sm"/>
+      <textarea id="a-text" placeholder="Use {name} as placeholder..." class="w-full border border-light rounded-xl px-3 py-2 text-sm h-16"></textarea>
+      <button id="a-add" class="bg-primary text-white text-sm font-semibold px-4 py-2 rounded-xl w-full">Add Affirmation</button>
+    </div>`);
+  form.querySelector('#a-add').onclick = () => {
+    const date = form.querySelector('#a-date').value;
+    const text = form.querySelector('#a-text').value.trim();
+    if (!date || !text){ toast('Fill all fields', 'error'); return; }
+    db.affirmations = db.affirmations.filter(a=>a.date!==date);
+    db.affirmations.push({ id: uid(), template: text, date });
+    saveDB(db); toast('Affirmation saved'); render();
+  };
+  body.appendChild(form);
+
+  const list = el(`<div class="space-y-2"></div>`);
+  [...db.affirmations].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,40).forEach(a=>{
+    const row = el(`<div class="card p-3 flex justify-between items-center"><div><p class="text-xs text-muted">${a.date}</p><p class="text-sm text-ink">${a.template}</p></div><button class="text-red text-xs">Delete</button></div>`);
+    row.querySelector('button').onclick = () => { db.affirmations = db.affirmations.filter(x=>x.id!==a.id); saveDB(db); render(); };
+    list.appendChild(row);
+  });
+  body.appendChild(list);
+  wrap.appendChild(body);
+  return wrap;
+});
+
+route('/admin/import', () => {
+  const wrap = el(`<div class="fade-in pb-10"></div>`);
+  wrap.appendChild(header('Import Members (XLSX)'));
+  const body = el(`<div class="px-6 space-y-3"></div>`);
+  body.appendChild(el(`<div class="card p-4 text-sm text-muted">Requires SheetJS (xlsx) in the production build to parse uploaded files with columns: Membership Code, Name, Email, Phone, Location, Attendance Score, Years Attended. This demo build accepts CSV paste below as a lightweight substitute.</div>`));
+  const form = el(`
+    <div class="card p-4 space-y-2">
+      <textarea id="csv-text" placeholder="Code,Name,Email,Phone,Location,Attendance Score,Years Attended" class="w-full border border-light rounded-xl px-3 py-2 text-sm h-32"></textarea>
+      <button id="csv-import" class="bg-primary text-white text-sm font-semibold px-4 py-2 rounded-xl w-full">Import</button>
+      <p id="import-result" class="text-xs text-muted"></p>
+    </div>`);
+  form.querySelector('#csv-import').onclick = () => {
+    const lines = form.querySelector('#csv-text').value.trim().split('\n').filter(Boolean);
+    let imported=0, skipped=0, errors=0;
+    lines.forEach(line=>{
+      const parts = line.split(',').map(s=>s.trim());
+      if (parts.length < 2){ errors++; return; }
+      const [code, name, email, phone, location, score, years] = parts;
+      if (db.members.find(m=>m.membership_code.toLowerCase()===code.toLowerCase())){ skipped++; return; }
+      db.members.push({ id: uid(), membership_code: code, name, email: email||'', phone: phone||'', location: location||'', attendance_score: parseInt(score)||0, years_attended: years||'', pin:null, first_login:true, created_at: new Date().toISOString() });
+      imported++;
+    });
+    saveDB(db);
+    form.querySelector('#import-result').textContent = `${imported} imported, ${skipped} skipped, ${errors} errors`;
+    toast('Import complete');
+  };
+  body.appendChild(form);
+  wrap.appendChild(body);
+  return wrap;
+});
+
+render();
+</script>
+</body>
+</html>
